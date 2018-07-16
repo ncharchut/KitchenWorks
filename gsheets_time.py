@@ -43,6 +43,7 @@ class Day(object):
         self.arg = arg
         self.day_tasks = []
         self.editors = editors
+        self.location = None # TODO
 
     def lock(self):
         """
@@ -117,15 +118,50 @@ class DayTask(object):
         """
             Determine grid location on sheet given the day and task number, returns a GridArea JSON.
         """
-        pass
+        new_location = day.get_location().vertical_shift(task_number)
+        grid_area = new_location.convert_to_grid_area()
+        return grid_area
 
 
 class Location(object):
     """docstring for Location"""
-    def __init__(self, arg):
+    def __init__(self, row, column, sheet_id):
         super(Location, self).__init__()
-        self.arg = arg
+        self.row = row
+        self.column = column
+        self.sheet_id = sheet_id
 
+    def get_row(self):
+        return self.row
+
+    def get_column(self):
+        return self.column
+
+    def get_sheet_id(self):
+        return self.sheet_id
+
+    def __add__(self, other):
+        new_row = self.row + other.get_row()
+        new_column = self.column + other.get_column()
+        return Location(new_row, new_column, self.sheet_id)
+
+    def horizontal_shift(self, delta):
+        return Location(self.row, self.column + delta, self.sheet_id)
+
+    def vertical_shift(self, delta):
+        return Location(self.row + delta, self.column, self.sheet_id)
+
+    def convert_to_a1(self):
+        pass
+
+    def convert_to_grid_area(self):
+         return {
+                    "sheetId" : self.sheet_id,
+                    "startRowIndex": self.row,
+                    "endRowIndex": self.row,
+                    "startColumnIndex": self.col,
+                    "endColumnIndex": self.col
+                }
 
 
 if __name__ == "__main__":
