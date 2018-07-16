@@ -28,15 +28,33 @@ class GSheetsRequest(object):
         store = file.Storage('credentials.json')
         creds = store.get()
         if not creds or creds.invalid:
-            flow = client.flow_from_clientsecrets('client_secret_3.json', SCOPES)
+            flow = client.flow_from_clientsecrets('client_secret.json', SCOPES)
             creds = tools.run_flow(flow, store)
         service = build('sheets', 'v4', http=creds.authorize(Http()))
         self.service = service
 
         return 1
 
+    def new_page_test(self):
+        request = {"addSheet": {
+                        "properties": {
+                          "title": "New Week Test 4",
+                          "gridProperties": {
+                            "rowCount": len(self.tasks) + 4, # TODO Get rid of magic number
+                            "columnCount": 10
+                          },
+                          "tabColor": {
+                            "red": 1.0,
+                            "green": 0.3,
+                            "blue": 0.4
+                          }
+                        }
+                      }}
+        self.push(request)
+
     def new_week_template(self, week_number):
         # 1. Read in current month sheet
+        print("getting current sheet")
         sheet_metadata = self.service.spreadsheets().get(spreadsheetId=self.spreadsheetId).execute()
         sheets = sheet_metadata.get('sheets', '')
         current_sheet = sheets[-1]
@@ -47,29 +65,31 @@ class GSheetsRequest(object):
         TASK_OFFSET = 4
         new_location = (week_number - 1) * (len(self.tasks) + TASK_OFFSET)
 
-        if week_number == 1:
-            # A. Clear the sheet.
-            clear_request = {
-                                "updateCells": 
-                                {
-                                    "range": 
-                                    {
-                                        "sheetId": current_sheet_id
-                                    },
-                                    "fields": "userEnteredValue"
-                                }
-                            }
-            self.push(clear_request)
+        # print("clearing the sheet")
+        # if week_number == 1:
+        #     # A. Clear the sheet.
+        #     clear_request = {
+        #                         "updateCells": 
+        #                         {
+        #                             "range": 
+        #                             {
+        #                                 "sheetId": current_sheet_id
+        #                             },
+        #                             "fields": "userEnteredValue"
+        #                         }
+        #                     }
+        #     self.push(clear_request)
 
             # B. Lock the sheet.
             # lock_sheet_request = self.lockcells.generate_lock_sheet_request(current_sheet_id)
             # self.push(lock_sheet_request)
-
+        print("generating new template")
         # 3. Generate new week body and write it there
         values, schedule_dict = self.tasks.generate_task_fields()
         write_request, lockdown_request = self.generate_write_request(values, current_sheet_name, current_sheet_id, new_location, schedule_dict)
         self.push_write(write_request)
         self.push(lockdown_request)
+        print("pushed, waiting for result")
 
     def generate_write_request(self, values, sheet_name, sheet_id, location, schedule_dict):
         """ Generates write request and blacks out the correct cells according
@@ -255,14 +275,15 @@ class GSheetsRequest(object):
         self.push(sample_request)
 
 
-    def full_send(self):
+    def full_send(self, request_only=False):
         response = self.service.spreadsheets() \
             .batchUpdate(spreadsheetId=self.spreadsheetId, body=self.request_body).execute()
-        response_w = self.service.spreadsheets() \
-            .values().batchUpdate(spreadsheetId=self.spreadsheetId, body=self.write_body).execute()
-        print('{0} cells updated.'.format(len(response.get('replies')))) 
-        # print('{0} cells updated.'.format(len(response.get('replies'))))
-        pprint(response_w) 
+
+        if not request_only:
+            response_w = self.service.spreadsheets() \
+                .values().batchUpdate(spreadsheetId=self.spreadsheetId, body=self.write_body).execute()
+        # print('{0} cells updated.'.format(len(response.get('replies')))) 
+        # print('{0} cells updated.'.format(len(response.get('replies')))) 
         self.request_body = {}
         self.write_body = {}
         return
@@ -295,13 +316,13 @@ if __name__ == "__main__":
     spreadsheetId = "1vMFRfLKJV2hJv1KW2KgP52Ltv6-g8MzCL0sNyt9pApM"
     gsheets = GSheetsRequest(editors, (0, 0), spreadsheetId)
     gsheets.start()
-    gsheets.new_week_template(1)
-    gsheets.new_week_template(2)
-    gsheets.new_week_template(3)
-    gsheets.new_week_template(4)
+    # gsheets.new_week_template(1)
+    # gsheets.new_week_template(2)
+    # gsheets.new_week_template(3)
+    # gsheets.new_week_template(4)
     # gsheets.new_week_template(2)
     # pprint(gsheets.request_body)
-    gsheets.full_send()
+    # gsheets.full_send()
     # # pprint(gsheets.view_last_write())
 
     # # gsheets.test_lock_debug()
@@ -311,5 +332,9 @@ if __name__ == "__main__":
     # pprint(gsheets.generate_blackout_request(0, 0, 1))
 
 
+    gsheets.new_page_test()
+    gsheets.full_send(request_only=True)
+    gsheets.new_week_template(1)
+    gsheets.full_send()
 
 
