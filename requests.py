@@ -20,6 +20,9 @@ class DropdownMenu(object):
 
     def get_validation_rule(self):
         return self.validation_rule
+
+    def get_names(self):
+        return self.names
         
     def generate_request(self, sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex):
         """ Generates JSON request dropdown menus in a given range. """

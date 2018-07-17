@@ -98,6 +98,9 @@ class TaskManager(object):
 
         return res, schedule_dict
 
+    def __repr__(self):
+        return "TaskManager({0})".format(self.file)
+
     def __len__(self):
         return len(self.tasks)
 
