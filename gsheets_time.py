@@ -10,19 +10,20 @@ class Month(object):
     """
         Needs to have access to default request format for blackout, dropdown, lock.
     """
-    def __init__(self, names, tasks, sheet_id, editors):
+    def __init__(self, names, tasks, sheet_id, sheet_name, editors):
         super(Month, self).__init__()
         self.names = names
         self.dropdown = DropdownMenu(names) # needs to fix
         self.names = self.dropdown.get_names()
         self.tasks = TaskManager(tasks)
         self.sheet_id = sheet_id
-        self.last_location = Location(0, 0, sheet_id)
+        self.sheet_name = sheet_name
+        self.last_location = Location(0, 0, self.sheet_id)
         self.editors = editors
         self.weeks = []
 
     def add_week(self):
-        new_week = Week(self.tasks, self.last_location, self.editors, self.names)
+        new_week = Week(self.tasks, self.last_location, self.editors, self.names, self.sheet_name)
         self.weeks.append(new_week)
         self.save()
         return new_week.get_request()
@@ -50,12 +51,13 @@ class Month(object):
 
 class Week(object):
     """docstring for Week"""
-    def __init__(self, tasks, location, editors, names):
+    def __init__(self, tasks, location, editors, names, sheet_name):
         super(Week, self).__init__()
         self.tasks = tasks
         self.location = location
         self.editors = editors
         self.names = names
+        self.sheet_name = sheet_name
         self.days = self._init_days()
 
         self._init_tasks(self.tasks)
@@ -75,8 +77,47 @@ class Week(object):
         pass
 
     def get_request(self):
-        return "Not yet implemented"
-        
+        dates_header = self.generate_dates_write_request(self.sheet_name, self.location)
+        task_fields = self.generate_task_requests()
+        return dates_header, task_fields
+
+    def generate_task_requests(self):
+        # either going to be black or have a dropdown menu
+        res = []
+        DAYS_IN_WEEK = 7
+
+        for i in range(DAYS_IN_WEEK):
+            day = self.days[i]
+            res.append([])
+            for task in day.day_tasks:
+                res[-1].append(task.task_format)
+        return res
+
+    def generate_dates_write_request(self, sheet_name, location):
+        """ Creates line of dates, assumed to be executed on a Sunday. """
+        days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+        values = []
+        new_date = self.get_next_monday()
+
+        for i, day in enumerate(days_of_week):
+            new_date = new_date + timedelta(days=i)
+            date_string = new_date.strftime("%m/%d")
+            values.append(["{0} ({1})".format(day, date_string)])
+
+        return self.get_date_json(sheet_name, location, values)
+
+    def get_date_json(self, sheet_name, location, values):
+        write_dates_range = "{0}!B{1}:H{1}".format(sheet_name, location.get_column())
+        major_dates_dimension = "COLUMNS"
+
+        write_dates_request = {
+                                "range": write_dates_range,
+                                "majorDimension": major_dates_dimension,
+                                "values": values
+                              }
+
+        return write_dates_request
 
     def _init_days(self):
         DAYS_IN_WEEK = 7
@@ -141,7 +182,6 @@ class Day(object):
             Prevents write access by anyone other than the specified editors.
         """
         # Generate range based on number of tasks, then create ONE lock request with that range.
-        # print(self.day_tasks)
 
         requests = [task.get_lock_request(self.editors) for task in self.day_tasks]
         self.locked = True
@@ -163,7 +203,7 @@ class Day(object):
         return self.location
 
     def add_day_task(self, task, task_number, names):
-        day_task = DayTask(task_number, self.date in task.get_schedule(), names, self, task)
+        day_task = DayTask(task_number, self.date.weekday() in task.get_schedule(), names, self, task)
         self.day_tasks.append(day_task)
         return True
 
@@ -288,6 +328,7 @@ if __name__ == "__main__":
     editors = ['nick', 'cboy']
     # names = ["nicholas", "connor"]
     sheet_id = 'abc123'
+    sheet_name = 'TEST'
     
     # month = Month(names, tasks, sheet_id, editors)
     # month.add_week()
