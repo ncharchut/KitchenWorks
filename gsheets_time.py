@@ -1,4 +1,4 @@
-from request_constants import BACKGROUND_BLACK, dropdown_format
+from request_constants import BACKGROUND_BLACK, dropdown_format, update_row_request
 from pprint import pprint
 import pickle
 from task import TaskManager
@@ -25,8 +25,27 @@ class Month(object):
     def add_week(self):
         new_week = Week(self.tasks, self.last_location, self.editors, self.names, self.sheet_name)
         self.weeks.append(new_week)
+        dates_writes, tasks_writes, tasks_fields = new_week.get_request()
+        clean_tasks = self.format_cell_updates(tasks_fields)
+
+        self.last_location = self.last_location.vertical_shift(len(self.tasks) + 3)
         self.save()
-        return new_week.get_request()
+
+        return dates_writes, tasks_writes, clean_tasks
+
+    def format_cell_updates(self, cell_updates):
+        requests = []
+        first_loc = self.last_location
+        last_loc = first_loc.horizontal_shift(len(self.tasks))
+
+        for i, row in enumerate(cell_updates):
+            new_first_loc = first_loc.vertical_shift(i + 1)
+            new_last_loc = last_loc.vertical_shift(i + 1)
+            grid_range = new_first_loc.convert_to_grid_range(new_last_loc)
+            request = update_row_request(row, grid_range)
+            requests.append(request)
+
+        return requests
 
     def save(self):
         with open('test_load.pickle', 'wb') as handle:

@@ -47,30 +47,19 @@ class GSheetsRequest(object):
     def new_week(self):
         # 1. Read in current month sheet
         date_writes, task_writes, cell_updates = self.month.add_week()
-        new_cells = self.format_cell_updates(cell_updates)
+        # new_cells = self.format_cell_updates(cell_updates)
+
         self.push_write(date_writes)
         self.push_write(task_writes)
-        self.push(new_cells)
+        self.push(cell_updates)
 
-        return date_writes, task_writes, new_cells
+        return date_writes, task_writes, cell_updates
 
     def new_month(self):
         # creates a new spreadsheet and shit for a new month
         pass
 
-    def format_cell_updates(self, cell_updates):
-        requests = []
-        first_loc = self.month.last_location
-        last_loc = first_loc.horizontal_shift(len(self.month.tasks))
 
-        for i, row in enumerate(cell_updates):
-            new_first_loc = first_loc.vertical_shift(i + 1)
-            new_last_loc = last_loc.vertical_shift(i + 1)
-            grid_range = new_first_loc.convert_to_grid_range(new_last_loc)
-            request = update_row_request(row, grid_range)
-            requests.append(request)
-
-        return requests
 
     def change_font_request(self, font):
         pass
