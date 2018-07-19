@@ -3,24 +3,24 @@ from apiclient.discovery import build
 from httplib2 import Http
 from oauth2client import file, client, tools
 from pprint import pprint
-from requests import DropdownMenu, LockCells
-from task import TaskManager
 from files import names, tasks
-import datetime
+from gsheets_time import Month
+from request_constants import update_row_request
 
 class GSheetsRequest(object):
     """docstring for GSheetsRequest"""
-    def __init__(self, editors, root_location, spreadsheetId):
+    def __init__(self, editors, names, tasks, spreadsheetId, month_file=None):
         super(GSheetsRequest, self).__init__()
         self.editors = editors
-        self.root_location = root_location
         self.service = None
-        self.tasks = TaskManager(tasks)
-        self.dropdown = DropdownMenu(names)
-        self.lockcells = LockCells(self.editors)
         self.spreadsheetId = spreadsheetId
         self.write_body = {}
         self.request_body = {}
+
+        self.start()
+        self.current_sheet_name, self.current_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
+        self.month = Month(names, tasks, self.current_sheet_id, self.current_sheet_name,
+                           self.editors) if month_file is None else Month.load(month_file)
 
     def start(self):
         """ Initializes credentials with Google Sheets API. """
@@ -35,213 +35,42 @@ class GSheetsRequest(object):
 
         return 1
 
-    def new_page_test(self):
-        request = {"addSheet": {
-                        "properties": {
-                          "title": "New Week Test 4",
-                          "gridProperties": {
-                            "rowCount": len(self.tasks) + 4, # TODO Get rid of magic number
-                            "columnCount": 10
-                          },
-                          "tabColor": {
-                            "red": 1.0,
-                            "green": 0.3,
-                            "blue": 0.4
-                          }
-                        }
-                      }}
-        self.push(request)
-
-    def new_week_template(self, week_number):
-        # 1. Read in current month sheet
-        print("getting current sheet")
-        sheet_metadata = self.service.spreadsheets().get(spreadsheetId=self.spreadsheetId).execute()
+    def get_sheet_name_and_id(self, spreadsheetId):
+        sheet_metadata = self.service.spreadsheets().get(spreadsheetId=spreadsheetId).execute()
         sheets = sheet_metadata.get('sheets', '')
         current_sheet = sheets[-1]
         current_sheet_name = current_sheet.get("properties", {}).get("title", -1)
         current_sheet_id = current_sheet.get("properties", {}).get("sheetId", -1)
 
-        # 2. Find location for next write using week_number
-        TASK_OFFSET = 4
-        new_location = (week_number - 1) * (len(self.tasks) + TASK_OFFSET)
+        return current_sheet_name, current_sheet_id
 
-        # print("clearing the sheet")
-        # if week_number == 1:
-        #     # A. Clear the sheet.
-        #     clear_request = {
-        #                         "updateCells": 
-        #                         {
-        #                             "range": 
-        #                             {
-        #                                 "sheetId": current_sheet_id
-        #                             },
-        #                             "fields": "userEnteredValue"
-        #                         }
-        #                     }
-        #     self.push(clear_request)
+    def new_week(self):
+        # 1. Read in current month sheet
+        date_writes, task_writes, cell_updates = self.month.add_week()
+        new_cells = self.format_cell_updates(cell_updates)
+        self.push_write(date_writes)
+        self.push_write(task_writes)
+        self.push(new_cells)
 
-            # B. Lock the sheet.
-            # lock_sheet_request = self.lockcells.generate_lock_sheet_request(current_sheet_id)
-            # self.push(lock_sheet_request)
-        print("generating new template")
-        # 3. Generate new week body and write it there
-        values, schedule_dict = self.tasks.generate_task_fields()
-        write_request, lockdown_request = self.generate_write_request(values, current_sheet_name, current_sheet_id, new_location, schedule_dict)
-        self.push_write(write_request)
-        self.push(lockdown_request)
-        print("pushed, waiting for result")
+        return date_writes, task_writes, new_cells
 
-    def generate_write_request(self, values, sheet_name, sheet_id, location, schedule_dict):
-        """ Generates write request and blacks out the correct cells according
-                to the schedule dictionary. """
+    def new_month(self):
+        # creates a new spreadsheet and shit for a new month
+        pass
 
-        # 1. Generate requests for tasks and dates
-        write_tasks_request = self.generate_task_write_request(values, sheet_name, location)
-        write_dates_request = self.generate_dates_write_request(sheet_name, location, schedule_dict)
-        blackout_request, lockdown_request = self.generate_blackout_request(sheet_id, location)
-
-
-        request = [write_tasks_request,
-                   write_dates_request]
-
-        return request, blackout_request
-
-    def generate_task_write_request(self, values, sheet_name, location):
-        # 1. Generate write request for tasks
-        root = location + 2
-        write_tasks_range = "{0}!A{2}:A{1}".format(sheet_name, len(values) + root, root)
-        major_tasks_dimension = "ROWS"
-        write_tasks_request = {
-                        "range": write_tasks_range,
-                        "majorDimension": major_tasks_dimension,
-                        "values": values
-                        }
-
-        return write_tasks_request
-
-    def generate_dates_write_request(self, sheet_name, location, schedule_dict):
-        """ Creates line of dates, assumed to be executed on a Sunday. """
-        days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
-        values = []
-        today = datetime.datetime.today()
-
-        for i, day in enumerate(days_of_week):
-            new_date = today + datetime.timedelta(days=i + 1)
-            new_date = new_date.strftime("%m/%d")
-            values.append(["{0} ({1})".format(day, new_date)])
-
-        write_dates_range = "{0}!B{1}:H{1}".format(sheet_name, location + 1)
-        major_dates_dimension = "COLUMNS"
-
-        write_dates_request = {
-                                "range": write_dates_range,
-                                "majorDimension": major_dates_dimension,
-                                "values": values
-                              }
-
-        return write_dates_request
-
-    def generate_blackout_request(self, sheet_id, location):
-        background_black = {
-                                "userEnteredFormat":
-                                {
-                                    "backgroundColor":
-                                    {
-                                        "red": 0,
-                                        "green": 0,
-                                        "blue": 0
-                                    }
-                                }
-                            }
-
-
-
-        dropdown_menu = {
-                            "dataValidation": self.dropdown.get_validation_rule()
-                        }
-
-        DAYS_IN_WEEK = 7
-        data = []
-        ALPHABET = "abcdefghijklmnopqrstuvwxyz"
-        translate = {i: char for i, char in enumerate(ALPHABET)}
-        lockdown_requests = []
-
-        for j, task in enumerate(self.tasks):
-            schedule = task.schedule
-            task_data = []
-            for i in range(DAYS_IN_WEEK):
-                if i not in schedule:
-                    # Make black and lock.
-                    task_data.append(background_black)
-                    a1_input_lock = "{0}{1}:{0}{1}".format(translate[i + 2], location + 1 + j)
-                    grid_range_lock = self.convert_A1_to_GridRange(sheet_id, a1_input_lock)
-                    lockdown_request = {
-                                            "addProtectedRange":
-                                            {
-                                                "protectedRange":
-                                                {
-                                                    "range": grid_range_lock,
-                                                    "warningOnly": False,
-                                                    "editors":
-                                                    {
-                                                        "users": self.editors
-                                                    }
-                                                }
-                                            }
-                                        }
-                    lockdown_requests.append(lockdown_request)
-                else:
-                    # Add dropdown menu.
-                    task_data.append(dropdown_menu)
-
-
-
-            data.append(task_data)
-
+    def format_cell_updates(self, cell_updates):
         requests = []
-        for i, row in enumerate(data):
-            a1_input_color = "B{0}:H{0}".format(location + 1 + i)
-            grid_range_color = self.convert_A1_to_GridRange(sheet_id, a1_input_color)
+        first_loc = self.month.last_location
+        last_loc = first_loc.horizontal_shift(len(self.month.tasks))
 
-            request = {
-                        "updateCells":
-                        {
-                            "rows":
-                            {
-                                "values": row
-                            },
-                            "range": grid_range_color,
-                            "fields": "userEnteredFormat.backgroundColor, dataValidation"
-                        }
-                      }
+        for i, row in enumerate(cell_updates):
+            new_first_loc = first_loc.vertical_shift(i + 1)
+            new_last_loc = last_loc.vertical_shift(i + 1)
+            grid_range = new_first_loc.convert_to_grid_range(new_last_loc)
+            request = update_row_request(row, grid_range)
             requests.append(request)
 
-            for lockdown_request in lockdown_requests:
-                requests.append(lockdown_request)
-
-        return requests, None
-
-    def convert_A1_to_GridRange(self, sheet_id, a1_input):
-        start, end = a1_input.lower().split(":")
-        ALPHABET = "abcdefghijklmnopqrstuvwxyz"
-        translate = {char: i for i, char in enumerate(ALPHABET)}
-
-        start_col = translate[start[0]]
-        start_row = int(start[1:])
-
-        end_col = translate[end[0]] + 1
-        end_row = int(end[1:]) + 1
-
-        GridRange = {
-                        "sheetId" : sheet_id,
-                        "startRowIndex": start_row,
-                        "endRowIndex": end_row,
-                        "startColumnIndex": start_col,
-                        "endColumnIndex": end_col
-                    }
-
-        return GridRange
+        return requests
 
     def change_font_request(self, font):
         pass
@@ -263,17 +92,6 @@ class GSheetsRequest(object):
             self.request_body["requests"].append(request)
 
         return
-
-    def test_dropdown_menu_debug(self):
-        sample_request = self.dropdown.generate_request(0, 3, 4, 1, 5)
-        # TODO: create Constants file with directed filenames for easy import of task names and contact information
-        self.push(sample_request)
-
-
-    def test_lock_debug(self):
-        sample_request = self.lockcells.generate_request(0, 0, 1, 0, 1)
-        self.push(sample_request)
-
 
     def full_send(self, request_only=False):
         response = self.service.spreadsheets() \
@@ -316,23 +134,6 @@ if __name__ == "__main__":
     spreadsheetId = "1vMFRfLKJV2hJv1KW2KgP52Ltv6-g8MzCL0sNyt9pApM"
     gsheets = GSheetsRequest(editors, (0, 0), spreadsheetId)
     gsheets.start()
-    # gsheets.new_week_template(1)
-    # gsheets.new_week_template(2)
-    # gsheets.new_week_template(3)
-    # gsheets.new_week_template(4)
-    # gsheets.new_week_template(2)
-    # pprint(gsheets.request_body)
-    # gsheets.full_send()
-    # # pprint(gsheets.view_last_write())
-
-    # # gsheets.test_lock_debug()
-    # # gsheets.test_dropdown_menu_debug()
-    # gsheets.full_send_writes()
-
-    # pprint(gsheets.generate_blackout_request(0, 0, 1))
-
-
-    gsheets.new_page_test()
     gsheets.full_send(request_only=True)
     gsheets.new_week_template(1)
     gsheets.full_send()

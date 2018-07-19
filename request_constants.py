@@ -28,4 +28,17 @@ def dropdown_format(names):
                 }
             }
 
+def update_row_request(row, grid_range):
+    return {
+                "updateCells":
+                {
+                    "rows":
+                    {
+                        "values": row
+                    },
+                    "range": grid_range,
+                    "fields": "userEnteredFormat.backgroundColor, dataValidation"
+                }
+            }
+
 

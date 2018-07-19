@@ -18,7 +18,7 @@ class Month(object):
         self.tasks = TaskManager(tasks)
         self.sheet_id = sheet_id
         self.sheet_name = sheet_name
-        self.last_location = Location(0, 0, self.sheet_id)
+        self.last_location = Location(1, 1, self.sheet_id)
         self.editors = editors
         self.weeks = []
 
@@ -68,29 +68,22 @@ class Week(object):
                 day = self.days[j]
                 day.add_day_task(task, i, self.names)
         print("All tasks added.")
-        
-
-    def add_task(self, task):
-        """
-            Adds a task to the week schedule. Not really necessary at this point.
-        """
-        pass
 
     def get_request(self):
         dates_header = self.generate_dates_write_request(self.sheet_name, self.location)
-        task_fields = self.generate_task_requests()
-        return dates_header, task_fields
+        tasks_header = self.generate_task_writes_request(self.sheet_name, self.location, self.tasks)
+        tasks_fields = self.generate_task_requests()
+        return dates_header, tasks_header, tasks_fields
 
     def generate_task_requests(self):
         # either going to be black or have a dropdown menu
-        res = []
+        res = [[] for _ in range(len(self.tasks))]
         DAYS_IN_WEEK = 7
 
         for i in range(DAYS_IN_WEEK):
             day = self.days[i]
-            res.append([])
-            for task in day.day_tasks:
-                res[-1].append(task.task_format)
+            for j, task in enumerate(day.day_tasks):
+                res[j].append(task.task_format)
         return res
 
     def generate_dates_write_request(self, sheet_name, location):
@@ -107,8 +100,23 @@ class Week(object):
 
         return self.get_date_json(sheet_name, location, values)
 
+    def generate_task_writes_request(self, sheet_name, location, tasks):
+        TASK_OFFSET = 2
+        root = location.get_row() + TASK_OFFSET
+        values, _ = tasks.generate_task_fields()
+
+        write_tasks_range = "{0}!A{1}:A{2}".format(sheet_name, root, root + len(tasks))
+        major_tasks_dimension = "ROWS"
+        write_tasks_request = {
+                        "range": write_tasks_range,
+                        "majorDimension": major_tasks_dimension,
+                        "values": values
+                        }
+
+        return write_tasks_request
+
     def get_date_json(self, sheet_name, location, values):
-        write_dates_range = "{0}!B{1}:H{1}".format(sheet_name, location.get_column())
+        write_dates_range = "{0}!B{1}:H{1}".format(sheet_name, location.get_row() + 1)
         major_dates_dimension = "COLUMNS"
 
         write_dates_request = {
@@ -318,6 +326,15 @@ class Location(object):
                     "endRowIndex": self.row + 1,
                     "startColumnIndex": self.column,
                     "endColumnIndex": self.column + 1
+                }
+
+    def convert_to_grid_range(self, other):
+        return {
+                    "sheetId" : self.sheet_id,
+                    "startRowIndex": self.row,
+                    "endRowIndex": other.get_row() + 1,
+                    "startColumnIndex": self.column,
+                    "endColumnIndex": other.get_column() + 1
                 }
 
     def __repr__(self):
