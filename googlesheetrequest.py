@@ -5,7 +5,9 @@ from oauth2client import file, client, tools
 from pprint import pprint
 from files import names, tasks
 from gsheets_time import Month
-from request_constants import update_row_request
+from request_constants import update_row_request, auto_resize_column_width,\
+                              update_spreadsheet_properties, update_spreadsheet_name
+from datetime import datetime, timedelta
 
 class GSheetsRequest(object):
     """docstring for GSheetsRequest"""
@@ -21,6 +23,8 @@ class GSheetsRequest(object):
         self.current_sheet_name, self.current_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
         self.month = Month(names, tasks, self.current_sheet_id, self.current_sheet_name,
                            self.editors) if month_file is None else Month.load(month_file)
+        self.sheet_name_date_start = None
+        self.sheet_name_date_end = None
 
     def start(self):
         """ Initializes credentials with Google Sheets API. """
@@ -46,12 +50,35 @@ class GSheetsRequest(object):
 
     def new_week(self):
         # 1. Read in current month sheet
-        date_writes, task_writes, cell_updates = self.month.add_week()
+        date_writes, task_writes, cell_updates, properties_request, last_date = self.month.add_week()
+        
+
+        if len(self.month.weeks) == 1: # first week added, need to reformat
+
+            clear_request = {
+                                "updateCells": 
+                                {
+                                    "range": 
+                                    {
+                                        "sheetId": self.month.sheet_id
+                                    },
+                                    "fields": "userEnteredValue"
+                                }
+                            }
+            self.push(clear_request)
+            width_request = auto_resize_column_width(self.month.sheet_id)
+            self.push(width_request)
+            print(width_request)
         # new_cells = self.format_cell_updates(cell_updates)
+
+        name_update = self.update_sheet_name(last_date)
 
         self.push_write(date_writes)
         self.push_write(task_writes)
+        self.push(properties_request)
         self.push(cell_updates)
+        self.push(name_update)
+
 
         return date_writes, task_writes, cell_updates
 
@@ -59,7 +86,25 @@ class GSheetsRequest(object):
         # creates a new spreadsheet and shit for a new month
         pass
 
+    def update_sheet_name(self, date):
+        if self.sheet_name_date_start is None:
+            inferred_start = date - timedelta(days=7)
+            self.sheet_name_date_start = inferred_start
 
+        self.sheet_name_date_end = date
+        new_name = self.generate_sheet_name()
+        self.month.update_name(new_name)
+        self.current_sheet_name = new_name
+
+        return update_spreadsheet_name(self.current_sheet_id, new_name)
+
+
+
+    def generate_sheet_name(self):
+        start = self.sheet_name_date_start.strftime("%m/%d")
+        end = self.sheet_name_date_end.strftime("%m/%d")
+
+        return "{0} - {1}".format(start, end)
 
     def change_font_request(self, font):
         pass
@@ -89,8 +134,7 @@ class GSheetsRequest(object):
         if not request_only:
             response_w = self.service.spreadsheets() \
                 .values().batchUpdate(spreadsheetId=self.spreadsheetId, body=self.write_body).execute()
-        # print('{0} cells updated.'.format(len(response.get('replies')))) 
-        # print('{0} cells updated.'.format(len(response.get('replies')))) 
+
         self.request_body = {}
         self.write_body = {}
         return
@@ -121,10 +165,8 @@ if __name__ == "__main__":
 
     editors = ["nicholas.charchut@gmail.com", "sweeney.connorj@gmail.com"]
     spreadsheetId = "1vMFRfLKJV2hJv1KW2KgP52Ltv6-g8MzCL0sNyt9pApM"
-    gsheets = GSheetsRequest(editors, (0, 0), spreadsheetId)
-    gsheets.start()
-    gsheets.full_send(request_only=True)
-    gsheets.new_week_template(1)
-    gsheets.full_send()
+    names = "names.csv"
+    tasks = "tasks.csv"
+    gsheets = GSheetsRequest(editors, names, tasks, spreadsheetId)
 
 

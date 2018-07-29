@@ -22,16 +22,46 @@ class Month(object):
         self.editors = editors
         self.weeks = []
 
+    def update_name(self, name):
+        self.sheet_name = name
+        for week in self.weeks:
+            week.update_name(name)
+
     def add_week(self):
         new_week = Week(self.tasks, self.last_location, self.editors, self.names, self.sheet_name)
+        last_date = new_week.get_last_date()
+
         self.weeks.append(new_week)
         dates_writes, tasks_writes, tasks_fields = new_week.get_request()
+
         clean_tasks = self.format_cell_updates(tasks_fields)
 
         self.last_location = self.last_location.vertical_shift(len(self.tasks) + 3)
         self.save()
 
-        return dates_writes, tasks_writes, clean_tasks
+        properties_requests = self.get_properties_request()
+
+        return dates_writes, tasks_writes, clean_tasks, properties_requests, last_date
+
+    def get_properties_request(self, hidden=False):
+        return {
+                "updateSheetProperties": {
+                "properties": {
+                              "sheetId": self.sheet_id,
+                              "gridProperties": {
+                                                    "rowCount": (len(self.tasks) + 3) * len(self.weeks), # TODO Get rid of magic number
+                                                    "columnCount": 10
+                                                  },
+                              "hidden": hidden,
+                              "tabColor": {
+                                        "red": 1.0,
+                                        "green": 0.3,
+                                        "blue": 0.4
+                                      }
+                  },
+                  "fields": "sheetId, gridProperties, hidden, tabColor"
+                  }
+                }
 
     def format_cell_updates(self, cell_updates):
         requests = []
@@ -88,6 +118,12 @@ class Week(object):
                 day.add_day_task(task, i, self.names)
         print("All tasks added.")
 
+    def update_name(self, name):
+        self.sheet_name = name
+
+    def get_last_date(self):
+        return self.days[-1].get_date()
+
     def get_request(self):
         dates_header = self.generate_dates_write_request(self.sheet_name, self.location)
         tasks_header = self.generate_task_writes_request(self.sheet_name, self.location, self.tasks)
@@ -110,12 +146,19 @@ class Week(object):
         days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
         values = []
-        new_date = self.get_next_monday()
+        # new_date = self.get_next_monday()
 
-        for i, day in enumerate(days_of_week):
-            new_date = new_date + timedelta(days=i)
-            date_string = new_date.strftime("%m/%d")
-            values.append(["{0} ({1})".format(day, date_string)])
+        # for i, day in enumerate(days_of_week):
+        #     new_date = new_date + timedelta(days=1)
+        #     date_string = new_date.strftime("%m/%d")
+        #     values.append(["{0} ({1})".format(day, date_string)])
+
+        for day in self.days:
+            date  = day.get_date()
+
+            day_of_week = days_of_week[date.weekday()]
+            date_string = date.strftime("%m/%d")
+            values.append(["{0} ({1})".format(day_of_week, date_string)])
 
         return self.get_date_json(sheet_name, location, values)
 
@@ -149,13 +192,13 @@ class Week(object):
     def _init_days(self):
         DAYS_IN_WEEK = 7
         
-        days = {}
+        days = []
         date = self.get_next_monday()
 
         for i in range(DAYS_IN_WEEK):
             location = self.location.horizontal_shift(i)
             day = Day(date, location, self.editors)
-            days[i] = day
+            days.append(day)
             date = date + timedelta(days=1)
         
         return days
@@ -228,6 +271,9 @@ class Day(object):
 
     def get_location(self):
         return self.location
+
+    def get_date(self):
+        return self.date
 
     def add_day_task(self, task, task_number, names):
         day_task = DayTask(task_number, self.date.weekday() in task.get_schedule(), names, self, task)
@@ -362,19 +408,8 @@ class Location(object):
 
 if __name__ == "__main__":
     editors = ['nick', 'cboy']
-    # names = ["nicholas", "connor"]
     sheet_id = 'abc123'
     sheet_name = 'TEST'
-    
-    # month = Month(names, tasks, sheet_id, editors)
-    # month.add_week()
-    # month.save()
-    # test_month = Month.load('test_load.pickle')
     test_week = Week(None, Location(0, 0, sheet_id), None)
     pprint(test_week.days)
-
-
-
-
-
         

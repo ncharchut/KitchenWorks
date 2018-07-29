@@ -42,3 +42,43 @@ def update_row_request(row, grid_range):
             }
 
 
+def auto_resize_column_width(sheetId):
+    return {
+              "autoResizeDimensions": {
+                "dimensions": {
+                  "sheetId": sheetId,
+                  "dimension": "COLUMNS"
+                }
+              }
+            }
+
+def update_spreadsheet_properties(sheetId, rows, cols, hidden=False):
+    return {
+            "updateSheetProperties": {
+            "properties": {
+                          "sheetId": sheetId,
+                          "gridProperties": {
+                                                "rowCount": rows,
+                                                "columnCount": cols
+                                              },
+                          "hidden": hidden,
+                          "tabColor": {
+                                    "red": 1.0,
+                                    "green": 0.3,
+                                    "blue": 0.4
+                                  }
+              },
+              "fields": "sheetId, gridProperties, hidden, tabColor"
+              }
+            }
+
+def update_spreadsheet_name(sheetId, name):
+    return {
+            "updateSheetProperties": {
+                                      "properties": {
+                                                     "sheetId": sheetId,
+                                                     "title": name
+                                                    },
+                                      "fields": "sheetId, title"
+                                     }
+            }
