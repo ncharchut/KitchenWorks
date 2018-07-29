@@ -27,6 +27,12 @@ class Month(object):
         for week in self.weeks:
             week.update_name(name)
 
+    def lock_days_before(self):
+        this_week = self.weeks[-1]
+        debug_date = datetime.today() + timedelta(days=5) # this will just be today in the future
+        requests = this_week.lock_days_before(debug_date)
+        return requests
+
     def add_week(self):
         new_week = Week(self.tasks, self.last_location, self.editors, self.names, self.sheet_name)
         last_date = new_week.get_last_date()
@@ -208,18 +214,22 @@ class Week(object):
         date =  today + timedelta(days=(7 - today.weekday()))
         return date
 
-    def lock_day(self, date=None):
+    def lock_days_before(self, date_cutoff=None):
         """
             Locks the day specified, or yesterday if not specified.
         """
-        lock_requests = {}
+        lock_requests = []
 
-        try:
-            date = date if date is not None else (datetime.now() - timedelta(1)).weekday()
-            day = self.days[date]
-            lock_requests = day.lock()
-        except: # day doesn't exist, need to decide what to do here
-            pass 
+        if date_cutoff is not None:
+            for day in self.days:
+                if day.get_date() < date_cutoff:
+                    lock_requests.append(day.lock())
+        # try:
+        #     date = date if date is not None else (datetime.now() - timedelta(1)).weekday()
+        #     day = self.days[date]
+        #     lock_requests = day.lock()
+        # except: # day doesn't exist, need to decide what to do here
+        #     pass 
 
         return lock_requests
 
@@ -348,7 +358,7 @@ class DayTask(object):
         """
             Determine grid location on sheet given the day and task number, returns a GridArea JSON.
         """
-        new_location = day.get_location().vertical_shift(task_number)
+        new_location = day.get_location().vertical_shift(task_number + 1)
         grid_area = new_location.convert_to_grid_area()
         return grid_area
 

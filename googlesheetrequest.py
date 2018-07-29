@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 class GSheetsRequest(object):
     """docstring for GSheetsRequest"""
-    def __init__(self, editors, names, tasks, spreadsheetId, month_file=None):
+    def __init__(self, editors, names, tasks, spreadsheetId, month_file=None, new_page_debug=False):
         super(GSheetsRequest, self).__init__()
         self.editors = editors
         self.service = None
@@ -20,6 +20,11 @@ class GSheetsRequest(object):
         self.request_body = {}
 
         self.start()
+        if new_page_debug:
+            self.new_page_test()
+            self.full_send(request_only=True)
+
+
         self.current_sheet_name, self.current_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
         self.month = Month(names, tasks, self.current_sheet_id, self.current_sheet_name,
                            self.editors) if month_file is None else Month.load(month_file)
@@ -38,6 +43,18 @@ class GSheetsRequest(object):
         self.service = service
 
         return 1
+
+    def new_page_test(self):
+        request = {"addSheet": {
+                        "properties": {
+                          "title": "New Week"
+                        },
+                        }}
+        self.push(request)
+
+    def lock_past_days(self):
+        lock_request = self.month.lock_days_before()
+        self.push(lock_request)
 
     def get_sheet_name_and_id(self, spreadsheetId):
         sheet_metadata = self.service.spreadsheets().get(spreadsheetId=spreadsheetId).execute()
@@ -68,7 +85,6 @@ class GSheetsRequest(object):
             self.push(clear_request)
             width_request = auto_resize_column_width(self.month.sheet_id)
             self.push(width_request)
-            print(width_request)
         # new_cells = self.format_cell_updates(cell_updates)
 
         name_update = self.update_sheet_name(last_date)
@@ -77,8 +93,11 @@ class GSheetsRequest(object):
         self.push_write(task_writes)
         self.push(properties_request)
         self.push(cell_updates)
-        self.push(name_update)
+    
+        self.full_send()
 
+        self.push(name_update)
+        self.full_send(request_only=True)
 
         return date_writes, task_writes, cell_updates
 
@@ -128,6 +147,8 @@ class GSheetsRequest(object):
         return
 
     def full_send(self, request_only=False):
+
+
         response = self.service.spreadsheets() \
             .batchUpdate(spreadsheetId=self.spreadsheetId, body=self.request_body).execute()
 
@@ -135,8 +156,11 @@ class GSheetsRequest(object):
             response_w = self.service.spreadsheets() \
                 .values().batchUpdate(spreadsheetId=self.spreadsheetId, body=self.write_body).execute()
 
+            print(response_w)
+
         self.request_body = {}
         self.write_body = {}
+        print(self.request_body) 
         return
 
     def full_send_writes(self):
