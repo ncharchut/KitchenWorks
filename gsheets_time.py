@@ -62,7 +62,7 @@ class Month(object):
                         elif day_format == RED:
                             multiplier = -1
                         else:
-                            pass
+                            multiplier = 0
                         result.append((name, multiplier, task_object))
 
         return result

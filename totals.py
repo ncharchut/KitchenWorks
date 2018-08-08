@@ -52,8 +52,8 @@ class CreditTotals(object):
             row = 2 + i
             write_range = "{0}!A{1}:{2}{1}".format("Totals", row, end_col)
             major_dimension = "COLUMNS"
-            person[1] = "=SUM(C{0}:{1}{0}) - {2}{0} + {3}{0}".format(row, end_col, COLUMNS[end_index + 1],
-                                                                    COLUMNS[end_index + 2])
+            # person[1] = "=SUM(C{0}:{1}{0}) - {2}{0} + {3}{0}".format(row, end_col, COLUMNS[end_index + 1],
+            #                                                         COLUMNS[end_index + 2])
 
             write_request = {
                             "range": write_range,
@@ -95,7 +95,7 @@ class PersonTotals(object):
 
     def generate_request_values(self):
         values = [self.contact.get_name()]
-        values.append('')
+        values.append(None)
 
         for task in self.task_ref:
             values.append(self.tasks[task])

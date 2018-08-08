@@ -12,6 +12,7 @@ from totals import CreditTotals
 import pickle
 from contacts import Contacts
 from task import TaskManager
+import schedule, time
 
 
 class GSheetsRequest(object):
@@ -54,6 +55,17 @@ class GSheetsRequest(object):
             creds = tools.run_flow(flow, store)
         service = build('sheets', 'v4', http=creds.authorize(Http()))
         return service
+
+    def serve(self):
+        # 1. Every 3 seconds, update totals.
+        # 2. Every Wednesday at 6 PM, generate a new week
+        # 2b. When it's a new month, generate a new month.
+        schedule.every(3).seconds.do(self.update_total)
+
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+
 
     def update_total(self, full_update=False):
         new_total = CreditTotals(self.spreadsheetId, self.service, self.contacts, self.tasks)
@@ -140,8 +152,18 @@ class GSheetsRequest(object):
         return "New week successfully added."
 
     def new_month(self):
-        # creates a new spreadsheet and shit for a new month
-        pass
+        # 1. Create new page.
+        self.new_page_test()
+        self.full_send(request_only=True)
+
+        # 2. Update sheet information.
+        self.current_sheet_name, self.current_sheet_id, self.totals_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
+        new_month = Month(self.contacts, self.tasks, self.current_sheet_id, self.spreadsheetId, self.current_sheet_name,
+                           self.editors)
+        
+        self.months.append(new_month)
+        self.recent_month = self.months[-1]
+        self.new_week()
 
     def update_sheet_name(self, date):
         if self.sheet_name_date_start is None:
