@@ -8,6 +8,7 @@ from gsheets_time import Month
 from request_constants import update_row_request, auto_resize_column_width,\
                               update_spreadsheet_properties, update_spreadsheet_name
 from datetime import datetime, timedelta
+from totals import CreditTotals
 
 class GSheetsRequest(object):
     """docstring for GSheetsRequest"""
@@ -18,13 +19,14 @@ class GSheetsRequest(object):
         self.spreadsheetId = spreadsheetId
         self.write_body = {}
         self.request_body = {}
+        self.service = self.start()
 
-        self.start()
         if new_page_debug:
             self.new_page_test()
             self.full_send(request_only=True)
 
 
+	self.totals = CreditTotals(spreadsheetId, self.service)
         self.current_sheet_name, self.current_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
         self.month = Month(names, tasks, self.current_sheet_id, self.current_sheet_name,
                            self.editors) if month_file is None else Month.load(month_file)
@@ -40,9 +42,12 @@ class GSheetsRequest(object):
             flow = client.flow_from_clientsecrets('client_secret.json', SCOPES)
             creds = tools.run_flow(flow, store)
         service = build('sheets', 'v4', http=creds.authorize(Http()))
-        self.service = service
+        return service
 
-        return 1
+    def update_total(self):
+	new_totals_request = self.totals.update()
+	self.push_write(new_totals_request)
+	self.full_send_writes()
 
     def new_page_test(self):
         request = {"addSheet": {
@@ -192,5 +197,5 @@ if __name__ == "__main__":
     names = "names.csv"
     tasks = "tasks.csv"
     gsheets = GSheetsRequest(editors, names, tasks, spreadsheetId)
-
-
+    gsheets.new_week()
+    gsheets.update_total()
