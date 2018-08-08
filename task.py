@@ -58,10 +58,22 @@ class TaskSchedule(object):
 
 class TaskManager(object):
     """docstring for TaskManager"""
-    def __init__(self, tasks_file):
+    def __init__(self, tasks_raw):
         super(TaskManager, self).__init__()
-        self.file = tasks_file
-        self.tasks = self.populate_tasks(self.file)
+        # self.file = tasks_file
+        # self.tasks = self.populate_tasks(self.file)
+        self.tasks_raw = tasks_raw
+        self.tasks = self._load_tasks(self.tasks_raw)
+
+    def _load_tasks(self, data):
+        tasks = []
+
+        for task in data['values']:
+            name, credits, schedule = task
+            new_task = Task(name, int(credits), schedule)
+            tasks.append(new_task)
+
+        return tasks
 
     def populate_tasks(self, file):
         tasks = []
@@ -72,7 +84,7 @@ class TaskManager(object):
                 if row[0] == "Task": # ignore labels row (first row)
                     continue
                 name, credits, schedule = row
-                task = Task(name, credits, schedule)
+                task = Task(name, int(credits), schedule)
                 tasks.append(task)
 
         return tasks

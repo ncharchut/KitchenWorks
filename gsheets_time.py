@@ -15,7 +15,7 @@ class Month(object):
         self.names = names
         self.dropdown = DropdownMenu(names) # needs to fix
         self.names = self.dropdown.get_names()
-        self.tasks = TaskManager(tasks)
+        self.tasks = tasks
         self.sheet_id = sheet_id
         self.spreadsheetId = spreadsheetId
         self.sheet_name = sheet_name

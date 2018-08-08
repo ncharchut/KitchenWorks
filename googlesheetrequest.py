@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from totals import CreditTotals
 import pickle
 from contacts import Contacts
+from task import TaskManager
 
 
 class GSheetsRequest(object):
@@ -28,12 +29,16 @@ class GSheetsRequest(object):
             self.new_page_test()
             self.full_send(request_only=True)
 
-        self.contacts = Contacts(self.get_contact_information(self.spreadsheetId))
-        self.totals = CreditTotals(spreadsheetId, self.service, self.contacts)
-        self.current_sheet_name, self.current_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
-        self.months = [Month(self.contacts, tasks, self.current_sheet_id, self.spreadsheetId, self.current_sheet_name,
+        contact_info, task_info = self.get_contact_task_information(self.spreadsheetId)
+        self.contacts = Contacts(contact_info)
+        self.tasks = TaskManager(task_info)
+        self.totals = CreditTotals(spreadsheetId, self.service, self.contacts, self.tasks)
+        self.current_sheet_name, self.current_sheet_id, self.totals_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
+        self.months = [Month(self.contacts, self.tasks, self.current_sheet_id, self.spreadsheetId, self.current_sheet_name,
                            self.editors) if month_file is None else Month.load(month_file)]
         self.recent_month = self.months[0]
+
+
         self.sheet_name_date_start = None
         self.sheet_name_date_end = None
         
@@ -51,17 +56,22 @@ class GSheetsRequest(object):
         return service
 
     def update_total(self, full_update=False):
-        new_total = CreditTotals(self.spreadsheetId, self.service)
+        new_total = CreditTotals(self.spreadsheetId, self.service, self.contacts, self.tasks)
 
         if full_update:
             for month in self.months:
                 month.update_credit_totals(new_total)
         else:
-            return self.recent_month.update_credit_totals(new_total)
+             self.recent_month.update_credit_totals(new_total)
 
-        # new_totals_request = self.new_total.full_request()
-        # self.push_write(new_totals_request)
-        # self.full_send_writes()
+        new_totals_requests = new_total.full_request()
+        for request in new_totals_requests:
+            self.push_write(request)
+
+        width_request = auto_resize_column_width(self.totals_sheet_id)
+        
+        self.push(width_request)
+        self.full_send()
 
     def new_page_test(self):
         request = {"addSheet": {
@@ -81,13 +91,15 @@ class GSheetsRequest(object):
         current_sheet = sheets[-1]
         current_sheet_name = current_sheet.get("properties", {}).get("title", -1)
         current_sheet_id = current_sheet.get("properties", {}).get("sheetId", -1)
+        totals_sheet_id = sheets[0].get("properties", {}).get("sheetId", -1)
 
-        return current_sheet_name, current_sheet_id
+        return current_sheet_name, current_sheet_id, totals_sheet_id
 
-    def get_contact_information(self, spreadsheetId):
-        contact_data = self.service.spreadsheets().values().get(spreadsheetId=spreadsheetId, range="Contacts").execute()
+    def get_contact_task_information(self, spreadsheetId):
+        data = self.service.spreadsheets().values().batchGet(spreadsheetId=spreadsheetId, ranges=["Contacts", "Tasks"]).execute()
+        contact_data, task_data = data['valueRanges']
 
-        return contact_data
+        return contact_data, task_data
 
     def new_week(self):
         # 1. Read in current month sheet
