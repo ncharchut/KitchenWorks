@@ -108,6 +108,14 @@ class TaskManager(object):
         for task in self.tasks:
             yield task
 
+    def __getitem__(self, index):
+        try:
+            task = self.tasks[index]
+            return task
+        except IndexError:
+            print("attempted to access a task that does not exist")
+            return
+
 if __name__ == "__main__":
     file = "tasks.csv"
     TaskManager(file)

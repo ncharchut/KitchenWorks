@@ -10,13 +10,14 @@ class Month(object):
     """
         Needs to have access to default request format for blackout, dropdown, lock.
     """
-    def __init__(self, names, tasks, sheet_id, sheet_name, editors):
+    def __init__(self, names, tasks, sheet_id, spreadsheetId, sheet_name, editors):
         super(Month, self).__init__()
         self.names = names
         self.dropdown = DropdownMenu(names) # needs to fix
         self.names = self.dropdown.get_names()
         self.tasks = TaskManager(tasks)
         self.sheet_id = sheet_id
+        self.spreadsheetId = spreadsheetId
         self.sheet_name = sheet_name
         self.last_location = Location(1, 1, self.sheet_id)
         self.editors = editors
@@ -27,6 +28,45 @@ class Month(object):
         for week in self.weeks:
             week.update_name(name)
 
+    def update_credit_totals(self, total):
+        locations = [week.data_location for week in self.weeks]
+        update = self.get_data(total, locations)
+        return update
+        
+
+    def get_data(self, total, locations):
+        # request = total.service.spreadsheets().get(spreadsheetId=self.sheet_id, ranges=locations)
+        request = total.service.spreadsheets().get(spreadsheetId=self.spreadsheetId, ranges=locations, includeGridData=True)
+        response = request.execute()
+        processed_data = self.process_data(response)
+        return total.update(processed_data)
+
+    def process_data(self, data):
+        this_sheet = data['sheets'][-1]
+        GREEN = {'red': 0.8509804, 'green': 0.91764706, 'blue': 0.827451}
+        RED = {'red': 0.95686275, 'green': 0.8, 'blue': 0.8}
+
+        result = []
+
+        for week in this_sheet['data']:
+            for row, thing in enumerate(week['rowData']):
+                task = thing['values']
+                task_object = self.tasks[row]
+
+                for day in task:
+                    name = day.get('effectiveValue', {}).get('stringValue', None)
+                    day_format = day.get('effectiveFormat', {}).get('backgroundColor', None)
+                    if name is not None and day_format is not None:
+                        if day_format == GREEN:
+                            multiplier = 1
+                        elif day_format == RED:
+                            multiplier = -1
+                        else:
+                            pass
+                        result.append((name, multiplier, task_object))
+
+        return result
+
     def lock_days_before(self):
         this_week = self.weeks[-1]
         debug_date = datetime.today() + timedelta(days=5) # this will just be today in the future
@@ -35,6 +75,7 @@ class Month(object):
 
     def add_week(self):
         new_week = Week(self.tasks, self.last_location, self.editors, self.names, self.sheet_name)
+        print(self.last_location)
         last_date = new_week.get_last_date()
 
         self.weeks.append(new_week)
@@ -114,6 +155,7 @@ class Week(object):
         self.names = names
         self.sheet_name = sheet_name
         self.days = self._init_days()
+        self.data_location = self.get_data_location(self.location)
 
         self._init_tasks(self.tasks)
 
@@ -124,8 +166,28 @@ class Week(object):
                 day.add_day_task(task, i, self.names)
         print("All tasks added.")
 
+    def update_credit_totals(self, total, data):
+        for task_number, values in enumerate(data):
+            credits = self.tasks[task_number].credits
+            task_name = self.tasks[task_number].name
+            for value in values:
+                total.update(task_name, value, credits)
+
+    def get_data_location(self, location):
+        COLUMNS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        DAYS_IN_WEEK = 7
+        col_start = self.location.get_column()
+        col_end = col_start + (DAYS_IN_WEEK - 1)
+
+        row_start = self.location.get_row() + 2
+        row_end = row_start + (len(self.tasks) - 1)
+
+        return "{0}!{1}{2}:{3}{4}".format(self.sheet_name, COLUMNS[col_start], row_start,
+                                          COLUMNS[col_end], row_end)
+
     def update_name(self, name):
         self.sheet_name = name
+        self.data_location = self.get_data_location(self.location)
 
     def get_last_date(self):
         return self.days[-1].get_date()

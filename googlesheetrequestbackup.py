@@ -68,17 +68,17 @@ class GSheetsRequest(object):
         # print("clearing the sheet")
         # if week_number == 1:
         #     # A. Clear the sheet.
-        #     clear_request = {
-        #                         "updateCells": 
-        #                         {
-        #                             "range": 
-        #                             {
-        #                                 "sheetId": current_sheet_id
-        #                             },
-        #                             "fields": "userEnteredValue"
-        #                         }
-        #                     }
-        #     self.push(clear_request)
+            # clear_request = {
+            #                     "updateCells": 
+            #                     {
+            #                         "range": 
+            #                         {
+            #                             "sheetId": current_sheet_id
+            #                         },
+            #                         "fields": "userEnteredValue"
+            #                     }
+            #                 }
+            # self.push(clear_request)
 
             # B. Lock the sheet.
             # lock_sheet_request = self.lockcells.generate_lock_sheet_request(current_sheet_id)
