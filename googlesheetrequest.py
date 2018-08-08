@@ -60,12 +60,17 @@ class GSheetsRequest(object):
         # 1. Every 3 seconds, update totals.
         # 2. Every Wednesday at 6 PM, generate a new week
         # 2b. When it's a new month, generate a new month.
-        schedule.every(3).seconds.do(self.update_total)
+        schedule.every(5).seconds.do(self.update_total)
+        schedule.every().day.do(self.update_contact_info)
 
         while True:
             schedule.run_pending()
             time.sleep(1)
 
+
+    def update_contact_info(self):
+        contact_info, task_info = self.get_contact_task_information(self.spreadsheetId)
+        self.contacts = Contacts(contact_info)
 
     def update_total(self, full_update=False):
         new_total = CreditTotals(self.spreadsheetId, self.service, self.contacts, self.tasks)
