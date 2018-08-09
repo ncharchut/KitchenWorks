@@ -8,8 +8,6 @@ class CreditTotals(object):
         self.service = service
         self.tasks = tasks
         self.totals = self._init_totals(self.contacts)
-
-        # contact -> task -> number completed
     
     def _init_totals(self, contacts):
         return {contact.get_name(): PersonTotals(contact, self.tasks) for contact in contacts}
