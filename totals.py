@@ -33,8 +33,9 @@ class CreditTotals(object):
 
     def generate_request_values(self):
         values = []
-
-        for person in self.totals:
+        people = sorted(self.totals.keys(), key=lambda x: x.split(' ')[-1])
+ 
+        for person in people:
             values.append(self.totals[person].generate_request_values())
 
         return values
