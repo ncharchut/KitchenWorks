@@ -60,13 +60,43 @@ class GSheetsRequest(object):
         # 1. Every 3 seconds, update totals.
         # 2. Every Wednesday at 6 PM, generate a new week
         # 2b. When it's a new month, generate a new month.
+
+        # Update service every hour.
+        schedule.every().hour.do(self.reload_credentials)
+
+        # Updates total sheet.
         schedule.every(5).seconds.do(self.update_total)
+
+        # Updates contact information.
         schedule.every().day.do(self.update_contact_info)
+
+        # Creates new week and sends email notifications.
+        schedule.every().wednesday.at("18:00").do(self.create_next_kitchenworks)
+
+        # Send email notifications each day. 
+        schedule.every().day.at("9:00").do(self.email_alerts)
 
         while True:
             schedule.run_pending()
             time.sleep(1)
 
+    def reload_credentials(self):
+        self.service = self.start()
+
+    def create_next_kitchenworks(self):
+        new_month = self.determine_if_new_month()
+
+        if new_month:
+            self.new_month()
+
+        else:
+            self.new_week()
+
+    def determine_if_new_month(self):
+        return self.sheet_name_date_start.month != self.sheet_name_date_end.month
+
+    def email_alerts(self):
+        pass
 
     def update_contact_info(self):
         contact_info, task_info = self.get_contact_task_information(self.spreadsheetId)
@@ -85,10 +115,12 @@ class GSheetsRequest(object):
         for request in new_totals_requests:
             self.push_write(request)
 
+
         width_request = auto_resize_column_width(self.totals_sheet_id)
         
         self.push(width_request)
         self.full_send()
+        return new_totals_requests
 
     def new_page_test(self):
         request = {"addSheet": {
@@ -162,6 +194,10 @@ class GSheetsRequest(object):
         self.full_send(request_only=True)
 
         # 2. Update sheet information.
+        self.sheet_name_date_start = None
+        self.sheet_name_date_end = None
+
+        # 3. Create new month.
         self.current_sheet_name, self.current_sheet_id, self.totals_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
         new_month = Month(self.contacts, self.tasks, self.current_sheet_id, self.spreadsheetId, self.current_sheet_name,
                            self.editors)
@@ -181,8 +217,6 @@ class GSheetsRequest(object):
         self.current_sheet_name = new_name
 
         return update_spreadsheet_name(self.current_sheet_id, new_name)
-
-
 
     def generate_sheet_name(self):
         start = self.sheet_name_date_start.strftime("%m/%d")
@@ -248,7 +282,6 @@ class GSheetsRequest(object):
     def save(self, file="gsheets_obj.pickle"):
         with open(file, 'wb') as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
         return
 
     @staticmethod
@@ -262,15 +295,6 @@ class GSheetsRequest(object):
 
 
 if __name__ == "__main__":
-    # editors = ["nicholas.charchut@gmail.com", "sweeney.connorj@gmail.com"]
-    # spreadsheetId = "1vMFRfLKJV2hJv1KW2KgP52Ltv6-g8MzCL0sNyt9pApM"
-    # names = "names.csv"
-    # tasks = "tasks.csv"
-    # gsheets = GSheetsRequest(editors, names, tasks, spreadsheetId)
-    # gsheets.new_week()
-    # gsheets.update_total()
-
-
     editors = ["nicholas.charchut@gmail.com", "sweeney.connorj@gmail.com"]
     spreadsheetId = "1vMFRfLKJV2hJv1KW2KgP52Ltv6-g8MzCL0sNyt9pApM"
     gsheets = GSheetsRequest(editors, names, tasks, spreadsheetId, new_page=True)
