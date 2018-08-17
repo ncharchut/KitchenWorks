@@ -10,11 +10,10 @@ class Month(object):
     """
         Needs to have access to default request format for blackout, dropdown, lock.
     """
-    def __init__(self, names, tasks, sheet_id, spreadsheetId, sheet_name, editors):
+    def __init__(self, contacts, tasks, sheet_id, spreadsheetId, sheet_name, editors):
         super(Month, self).__init__()
-        self.names = names
-        self.dropdown = DropdownMenu(names) # needs to fix
-        self.names = self.dropdown.get_names()
+        self.contacts = contacts
+        self.names = self.contacts.get_names()
         self.tasks = tasks
         self.sheet_id = sheet_id
         self.spreadsheetId = spreadsheetId
@@ -28,6 +27,10 @@ class Month(object):
         for week in self.weeks:
             week.update_name(name)
 
+    def update_contacts(self, contacts):
+        self.contacts = contacts
+        self.names = contacts.get_names()
+
     def update_credit_totals(self, total):
         locations = [week.data_location for week in self.weeks]
         update = self.get_data(total, locations)
@@ -35,7 +38,6 @@ class Month(object):
         
 
     def get_data(self, total, locations):
-        # request = total.service.spreadsheets().get(spreadsheetId=self.sheet_id, ranges=locations)
         request = total.service.spreadsheets().get(spreadsheetId=self.spreadsheetId, ranges=locations, includeGridData=True)
         response = request.execute()
         processed_data = self.process_data(response)
@@ -69,8 +71,8 @@ class Month(object):
 
     def lock_days_before(self):
         this_week = self.weeks[-1]
-        debug_date = datetime.today() + timedelta(days=5) # this will just be today in the future
-        requests = this_week.lock_days_before(debug_date)
+        # debug_date = datetime.today() + timedelta(days=5) # this will just be today in the future
+        requests = this_week.lock_days_before(datetime.today())
         return requests
 
     def add_week(self):
@@ -278,20 +280,17 @@ class Week(object):
 
     def lock_days_before(self, date_cutoff=None):
         """
-            Locks the day specified, or yesterday if not specified.
+            Locks the day specified, or today if not specified.
         """
         lock_requests = []
 
         if date_cutoff is not None:
             for day in self.days:
-                if day.get_date() < date_cutoff:
+                if day.get_date() < date_cutoff and not date.locked:
                     lock_requests.append(day.lock())
-        # try:
-        #     date = date if date is not None else (datetime.now() - timedelta(1)).weekday()
-        #     day = self.days[date]
-        #     lock_requests = day.lock()
-        # except: # day doesn't exist, need to decide what to do here
-        #     pass 
+        else:
+            day = self.days[datetime.today().weekday]
+            lock_requests.append(day.lock())
 
         return lock_requests
 

@@ -27,13 +27,12 @@ class GSheetsRequest(object):
         self.service = self.start()
 
         if new_page:
-            self.new_page_test()
+            self.new_page()
             self.full_send(request_only=True)
 
         contact_info, task_info = self.get_contact_task_information(self.spreadsheetId)
         self.contacts = Contacts(contact_info)
         self.tasks = TaskManager(task_info)
-        self.totals = CreditTotals(spreadsheetId, self.service, self.contacts, self.tasks)
         self.current_sheet_name, self.current_sheet_id, self.totals_sheet_id = self.get_sheet_name_and_id(self.spreadsheetId)
         self.months = [Month(self.contacts, self.tasks, self.current_sheet_id, self.spreadsheetId, self.current_sheet_name,
                            self.editors) if month_file is None else Month.load(month_file)]
@@ -61,11 +60,12 @@ class GSheetsRequest(object):
         # 2. Every Wednesday at 6 PM, generate a new week
         # 2b. When it's a new month, generate a new month.
 
-        # Update service every hour.
+        # Update service credentials  every hour.
         schedule.every().hour.do(self.reload_credentials)
 
         # Updates total sheet.
         schedule.every(5).seconds.do(self.update_total)
+        schedule.every().hour.do(self.update_total, True)
 
         # Updates contact information.
         schedule.every().day.do(self.update_contact_info)
@@ -76,6 +76,9 @@ class GSheetsRequest(object):
         # Send email notifications each day. 
         schedule.every().day.at("9:00").do(self.email_alerts)
 
+        # Lock the previous day everyday.
+        schedule.every().day.at("11:59").do(self.lock_past_days)
+
         while True:
             schedule.run_pending()
             time.sleep(1)
@@ -84,6 +87,7 @@ class GSheetsRequest(object):
         self.service = self.start()
 
     def create_next_kitchenworks(self):
+        """ Creates new kitchenwork, whether month or week. """
         new_month = self.determine_if_new_month()
 
         if new_month:
@@ -92,17 +96,25 @@ class GSheetsRequest(object):
         else:
             self.new_week()
 
+
+        self.save()
+
     def determine_if_new_month(self):
+        """ Determines if a new month sheet should be created. """
         return self.sheet_name_date_start.month != self.sheet_name_date_end.month
 
     def email_alerts(self):
         pass
 
     def update_contact_info(self):
+        """ Updates contact information in the database. """
         contact_info, task_info = self.get_contact_task_information(self.spreadsheetId)
         self.contacts = Contacts(contact_info)
+        for month in self.months:
+            month.update_contacts(self.contacts)
 
     def update_total(self, full_update=False):
+        """ Updates the credit totals, defaults to updating according only to the most recent month. """
         new_total = CreditTotals(self.spreadsheetId, self.service, self.contacts, self.tasks)
 
         if full_update:
@@ -122,19 +134,24 @@ class GSheetsRequest(object):
         self.full_send()
         return new_totals_requests
 
-    def new_page_test(self):
+    def new_page(self):
+        """ Creates a new page. """
         request = {"addSheet": {
                         "properties": {
                           "title": "New Week"
                         },
-                        }}
+                    }
+                  }
         self.push(request)
 
     def lock_past_days(self):
+        """ Locks previous days so only the previously specified editors can edit. """
         lock_request = self.recent_month.lock_days_before()
         self.push(lock_request)
 
     def get_sheet_name_and_id(self, spreadsheetId):
+        """ Identifies most recent sheet name and ID, as well as the ID
+                of the credit total sheet. """
         sheet_metadata = self.service.spreadsheets().get(spreadsheetId=spreadsheetId).execute()
         sheets = sheet_metadata.get('sheets', '')
         current_sheet = sheets[-1]
@@ -145,6 +162,7 @@ class GSheetsRequest(object):
         return current_sheet_name, current_sheet_id, totals_sheet_id
 
     def get_contact_task_information(self, spreadsheetId):
+        """ Extracts contact and task information from spreadsheet. """
         data = self.service.spreadsheets().values().batchGet(spreadsheetId=spreadsheetId, ranges=["Contacts", "Tasks"]).execute()
         contact_data, task_data = data['valueRanges']
 
@@ -156,7 +174,6 @@ class GSheetsRequest(object):
         
 
         if len(self.recent_month.weeks) == 1: # first week added, need to reformat
-
             clear_request = {
                                 "updateCells": 
                                 {
@@ -170,7 +187,6 @@ class GSheetsRequest(object):
             self.push(clear_request)
             width_request = auto_resize_column_width(self.recent_month.sheet_id)
             self.push(width_request)
-        # new_cells = self.format_cell_updates(cell_updates)
 
         name_update = self.update_sheet_name(last_date)
 
@@ -184,13 +200,12 @@ class GSheetsRequest(object):
         self.push(name_update)
         self.full_send(request_only=True)
 
-        # return date_writes, task_writes, cell_updates
         self.save()
         return "New week successfully added."
 
     def new_month(self):
         # 1. Create new page.
-        self.new_page_test()
+        self.new_page()
         self.full_send(request_only=True)
 
         # 2. Update sheet information.
@@ -204,13 +219,16 @@ class GSheetsRequest(object):
         
         self.months.append(new_month)
         self.recent_month = self.months[-1]
+        self.save()
         self.new_week()
 
     def update_sheet_name(self, date):
+        # 1. Determine start date for name of sheet.
         if self.sheet_name_date_start is None:
             inferred_start = date - timedelta(days=7)
             self.sheet_name_date_start = inferred_start
 
+        # 2. Adjust end date name of sheet.
         self.sheet_name_date_end = date
         new_name = self.generate_sheet_name()
         self.recent_month.update_name(new_name)
@@ -219,6 +237,7 @@ class GSheetsRequest(object):
         return update_spreadsheet_name(self.current_sheet_id, new_name)
 
     def generate_sheet_name(self):
+        """ Generates sheet name based on the weeks the month contains. """
         start = self.sheet_name_date_start.strftime("%m/%d")
         end = self.sheet_name_date_end.strftime("%m/%d")
 
@@ -228,6 +247,7 @@ class GSheetsRequest(object):
         pass
 
     def push_write(self, request):
+        """ Pushes cell write requests. """
         if "valueInputOption" not in self.write_body:
             self.write_body["valueInputOption"] = "USER_ENTERED"
             self.write_body["data"] = [request]
@@ -237,6 +257,7 @@ class GSheetsRequest(object):
         return
 
     def push(self, request):
+        """ Pushes cell format request. """
         if "requests" not in self.request_body:
             self.request_body["requests"] = [request]
 
@@ -246,8 +267,7 @@ class GSheetsRequest(object):
         return
 
     def full_send(self, request_only=False):
-
-
+        """ Executes requests, defaults to both cell format and write requests. """
         response = self.service.spreadsheets() \
             .batchUpdate(spreadsheetId=self.spreadsheetId, body=self.request_body).execute()
 
@@ -255,37 +275,44 @@ class GSheetsRequest(object):
             response_w = self.service.spreadsheets() \
                 .values().batchUpdate(spreadsheetId=self.spreadsheetId, body=self.write_body).execute()
 
-            # print(response_w)
 
         self.request_body = {}
         self.write_body = {}
-        # print(self.request_body) 
         return
 
     def full_send_writes(self):
+        """ Executes cell write requests. """
         response = self.service.spreadsheets() \
             .values().batchUpdate(spreadsheetId=self.spreadsheetId, body=self.write_body).execute()
-        # print('{0} cells updated.'.format(len(response.get('replies')))) 
+
         self.write_body = {}
         return
 
     def view_last_task(self):
+        """ View most recent cell format request added to the queue. """
         if 'requests' not in self.body:
             return {}
         return self.body['requests'][-1]
 
     def view_last_write(self):
+        """ View most recent cell write request added to the queue. """
         if 'data' not in self.write_body:
             return {}
         return self.write_body
 
     def save(self, file="gsheets_obj.pickle"):
+        """ Saves the current object. """
+        if file is None:
+            time = datetime.now()
+            file = time.strftime("%m_%d@%H_%M_%S")
+
         with open(file, 'wb') as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return
 
     @staticmethod
     def load(file):
+        """ Loads object given filename. """
         with open(file, 'rb') as handle:
             gsheets = pickle.load(handle)
 
