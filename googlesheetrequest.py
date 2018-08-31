@@ -7,6 +7,7 @@ from files import names, tasks
 from gsheets_time import Month
 from request_constants import update_row_request, auto_resize_column_width,\
                               update_spreadsheet_properties, update_spreadsheet_name
+
 from datetime import datetime, timedelta
 from totals import CreditTotals
 import pickle
@@ -80,8 +81,12 @@ class GSheetsRequest(object):
         schedule.every().day.at("11:59").do(self.lock_past_days)
 
         while True:
-            schedule.run_pending()
-            time.sleep(1)
+            try:
+                schedule.run_pending()
+                time.sleep(1)
+            except:
+                print("Error occurred.")
+                return
 
     def reload_credentials(self):
         self.service = self.start()
