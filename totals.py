@@ -10,6 +10,7 @@ class CreditTotals(object):
         self.totals = self._init_totals(self.contacts)
     
     def _init_totals(self, contacts):
+        """ Initialize totals with  """
         return {contact.get_name(): PersonTotals(contact, self.tasks) for contact in contacts}
 
     def update(self, data):

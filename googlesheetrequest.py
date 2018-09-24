@@ -106,9 +106,12 @@ class GSheetsRequest(object):
 
     def determine_if_new_month(self):
         """ Determines if a new month sheet should be created. """
+        if self.sheet_name_date_start is None or self.sheet_name_date_end is None:
+            return True
         return self.sheet_name_date_start.month != self.sheet_name_date_end.month
 
     def email_alerts(self):
+        
         pass
 
     def update_contact_info(self):

@@ -77,7 +77,6 @@ class Month(object):
 
     def add_week(self):
         new_week = Week(self.tasks, self.last_location, self.editors, self.names, self.sheet_name)
-        print(self.last_location)
         last_date = new_week.get_last_date()
 
         self.weeks.append(new_week)
@@ -214,14 +213,7 @@ class Week(object):
     def generate_dates_write_request(self, sheet_name, location):
         """ Creates line of dates, assumed to be executed on a Sunday. """
         days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
         values = []
-        # new_date = self.get_next_monday()
-
-        # for i, day in enumerate(days_of_week):
-        #     new_date = new_date + timedelta(days=1)
-        #     date_string = new_date.strftime("%m/%d")
-        #     values.append(["{0} ({1})".format(day, date_string)])
 
         for day in self.days:
             date  = day.get_date()
@@ -383,7 +375,7 @@ class DayTask(object):
         locked = False
 
         if available:
-            task_format = dropdown_format(self.names)
+            task_format = dropdown_format([{"userEnteredValue": name} for name in self.names])
         else:
             task_format = BACKGROUND_BLACK
             locked = True

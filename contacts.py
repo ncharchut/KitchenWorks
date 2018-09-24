@@ -19,7 +19,7 @@ class Contacts(object):
         return contacts
 
     def get_names(self):
-        return [person.get_name() for contact in self.contacts]
+        return [contact.get_name() for contact in self.contacts]
 
     def __iter__(self):
         for contact in self.contacts:

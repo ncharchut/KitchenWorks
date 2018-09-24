@@ -42,11 +42,6 @@ class DropdownMenu(object):
                 }
 
     def process_name_file(self, contacts):
-        # names = []
-        # with open(file, 'r') as f:
-        #     reader = csv.reader(f)
-        #     for row in reader:
-        #         names.append({"userEnteredValue": row[0]})
         names = [{"userEnteredValue": contact.get_name()} for contact in contacts]
 
         return names
