@@ -9,7 +9,7 @@ def main(load=False):
         if load:        
                 gsheets = GSheetsRequest.load('gsheets_obj.pickle')
         else:
-                gsheets = GSheetsRequest(editors, names, tasks, spreadsheetId)        
+                gsheets = GSheetsRequest(editors, names, tasks, spreadsheetId, new_page=True)        
                 gsheets.new_week()
 
         gsheets.serve()
