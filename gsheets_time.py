@@ -75,8 +75,8 @@ class Month(object):
         requests = this_week.lock_days_before(datetime.today())
         return requests
 
-    def add_week(self):
-        new_week = Week(self.tasks, self.last_location, self.editors, self.names, self.sheet_name)
+    def add_week(self, base_date=None):
+        new_week = Week(self.tasks, self.last_location, self.editors, self.names, self.sheet_name, base_date)
         last_date = new_week.get_last_date()
 
         self.weeks.append(new_week)
@@ -148,14 +148,14 @@ class Month(object):
 
 class Week(object):
     """docstring for Week"""
-    def __init__(self, tasks, location, editors, names, sheet_name):
+    def __init__(self, tasks, location, editors, names, sheet_name, date_override=None):
         super(Week, self).__init__()
         self.tasks = tasks
         self.location = location
         self.editors = editors
         self.names = names
         self.sheet_name = sheet_name
-        self.days = self._init_days()
+        self.days = self._init_days(date_override)
         self.data_location = self.get_data_location(self.location)
 
         self._init_tasks(self.tasks)
@@ -165,7 +165,6 @@ class Week(object):
             for j in range(7): # fix magic number
                 day = self.days[j]
                 day.add_day_task(task, i, self.names)
-        print("All tasks added.")
 
     def update_credit_totals(self, total, data):
         for task_number, values in enumerate(data):
@@ -251,11 +250,14 @@ class Week(object):
 
         return write_dates_request
 
-    def _init_days(self):
+    def _init_days(self, date_override):
         DAYS_IN_WEEK = 7
         
         days = []
-        date = self.get_next_monday()
+        if date_override is not None:
+            date = datetime.strptime(date_override, "%m/%d/%y")
+        else:
+            date = self.get_next_monday()
 
         for i in range(DAYS_IN_WEEK):
             location = self.location.horizontal_shift(i)

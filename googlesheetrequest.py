@@ -176,11 +176,11 @@ class GSheetsRequest(object):
 
         return contact_data, task_data
 
-    def new_week(self):
+    def new_week(self, base_date=None):
         # 1. Read in current month sheet
-        date_writes, task_writes, cell_updates, properties_request, last_date = self.recent_month.add_week()
+        date_writes, task_writes, cell_updates, properties_request, last_date = self.recent_month.add_week(base_date)
         
-
+        width_request = None
         if len(self.recent_month.weeks) == 1: # first week added, need to reformat
             clear_request = {
                                 "updateCells": 
@@ -194,18 +194,18 @@ class GSheetsRequest(object):
                             }
             self.push(clear_request)
             width_request = auto_resize_column_width(self.recent_month.sheet_id)
-            self.push(width_request)
-
+            
         name_update = self.update_sheet_name(last_date)
-
         self.push_write(date_writes)
         self.push_write(task_writes)
         self.push(properties_request)
         self.push(cell_updates)
-    
+
         self.full_send()
 
         self.push(name_update)
+        if width_request is not None:
+            self.push(width_request)
         self.full_send(request_only=True)
 
         self.save()
@@ -233,7 +233,7 @@ class GSheetsRequest(object):
     def update_sheet_name(self, date):
         # 1. Determine start date for name of sheet.
         if self.sheet_name_date_start is None:
-            inferred_start = date - timedelta(days=7)
+            inferred_start = date - timedelta(days=6)
             self.sheet_name_date_start = inferred_start
 
         # 2. Adjust end date name of sheet.
@@ -276,14 +276,14 @@ class GSheetsRequest(object):
 
     def full_send(self, request_only=False):
         """ Executes requests, defaults to both cell format and write requests. """
+
         response = self.service.spreadsheets() \
             .batchUpdate(spreadsheetId=self.spreadsheetId, body=self.request_body).execute()
 
         if not request_only:
             response_w = self.service.spreadsheets() \
                 .values().batchUpdate(spreadsheetId=self.spreadsheetId, body=self.write_body).execute()
-
-
+    
         self.request_body = {}
         self.write_body = {}
         return
@@ -308,11 +308,11 @@ class GSheetsRequest(object):
             return {}
         return self.write_body
 
-    def save(self, file="gsheets_obj.pickle"):
+    def save(self, file=None):
         """ Saves the current object. """
         if file is None:
             time = datetime.now()
-            file = time.strftime("%m_%d@%H_%M_%S")
+            file = time.strftime("%m_%d@%H_%M_%S.pickle")
 
         with open(file, 'wb') as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
