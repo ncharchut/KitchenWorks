@@ -280,7 +280,7 @@ class Week(object):
 
         if date_cutoff is not None:
             for day in self.days:
-                if day.get_date() < date_cutoff and not date.locked:
+                if day.get_date() < date_cutoff and not day.locked:
                     lock_requests.append(day.lock())
         else:
             day = self.days[datetime.today().weekday]

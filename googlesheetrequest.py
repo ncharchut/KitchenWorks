@@ -14,7 +14,7 @@ import pickle
 from contacts import Contacts
 from task import TaskManager
 import schedule, time
-
+import traceback, logging
 
 class GSheetsRequest(object):
     """docstring for GSheetsRequest"""
@@ -84,8 +84,9 @@ class GSheetsRequest(object):
             try:
                 schedule.run_pending()
                 time.sleep(1)
-            except:
-                print("Error occurred.")
+            except Exception as e:
+                print("Error occurred")
+                logging.error(traceback.format_exc())
                 return
 
     def reload_credentials(self):
